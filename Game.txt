@@ -1,0 +1,1589 @@
+import java.awt.Component;
+import java.awt.Point;
+import java.io.IOException;
+import java.util.concurrent.*;
+import javax.swing.JLabel;
+import java.util.*;
+
+public class Game
+{
+	// Data members of the game
+	// Constructor
+	private ChessGUI myframe; 
+	private Scanner myScanner;
+	Game(Semaphore mySem, int decision) 
+	{
+		myframe = new ChessGUI(mySem, decision);		
+	}
+	
+	private void generatePawnMoves(ChessPiece p, boolean checkRequired)
+	{
+		int blackMove = 0;
+		int blackMove2 = 0;
+		if (!p.isType()) // in this case blackMove is 150
+		{
+			blackMove = 150;
+			blackMove2 = 300;
+		}
+		ArrayList<ChessPiece> arrChessPieces = myframe.getPieceLoc();
+		ArrayList<ChessPiece> potentiallyValidU = new ArrayList<ChessPiece>();
+		ArrayList<ChessPiece> potentiallyValidC = new ArrayList<ChessPiece>();
+		boolean flagInFront = false;		
+		for (int i = 0; i < arrChessPieces.size(); i++)
+		{
+			// Checking if there is any piece in front
+			if ((arrChessPieces.get(i).getX() == p.getX()) && (arrChessPieces.get(i).getY() == (p.getY() - 75 + blackMove)))
+			{
+				flagInFront = true; // There is a piece in front of the pawn!
+			}
+			else if (((arrChessPieces.get(i).getX() == p.getX()) && (arrChessPieces.get(i).getY() == (p.getY() - 150 + blackMove2))) && ((p.getY() == 500) || (p.getY() == 125)))
+			{
+				flagInFront = true; // There is a piece in front of the pawn!
+			}
+			// Determine whether any enemy pieces are diagonal to the piece.
+			int diff = -75;
+			for (int j = 0; j < 2; j++)
+			{
+				if(j == 1) diff = 75;
+				if ((arrChessPieces.get(i).getX() == (p.getX() + diff)) && (arrChessPieces.get(i).getY() == (p.getY() - 75 + blackMove)))
+				{
+					if (!arrChessPieces.get(i).isType() == p.isType())
+					{
+						// Determine whether piece type is valid for a user or computer.
+						ChessPiece p2 = new ChessPiece(p.getX() + diff, p.getY() - 75 + blackMove, p.getName(), p.isType());
+						if (p2.isType()) potentiallyValidU.add(p2);
+						else potentiallyValidC.add(p2);
+					}
+				}
+			}
+		}
+		if (!flagInFront) // If no pieces in front of pawn 
+		{
+			ChessPiece p2 = new ChessPiece(p.getX(), p.getY() - 75 + blackMove, p.getName(), p.isType());
+			ChessPiece p3 = new ChessPiece(p.getX(), p.getY() - 150 + blackMove2, p.getName(), p.isType());
+			if (p2.isType()) {
+				potentiallyValidU.add(p2);
+				if ((p.getY() == 500) || (p.getY() == 125)) potentiallyValidU.add(p3); // If 1st/2nd square
+			}
+			else {
+				potentiallyValidC.add(p2);
+				if ((p.getY() == 500) || (p.getY() == 125)) potentiallyValidC.add(p3); // If 1st/2nd square 
+			}
+		}
+		if (((potentiallyValidU.size() > 0) && myframe.checkUser) && checkRequired)
+		{
+			// User is in check.
+			for (int i = 0; i < potentiallyValidU.size(); i++)
+			{
+				// First we remove any piece currently add the ith potentially valid user move
+				int savedX = 0;
+				int savedY = 0;
+				int indexOfSwap = -1;
+				for (int k = 0; k < myframe.getPieceLoc().size(); k++)
+				{
+					if ((potentiallyValidU.get(i).getX() == myframe.getPieceLoc().get(k).getX()) && (potentiallyValidU.get(i).getY() == myframe.getPieceLoc().get(k).getY()))
+					{
+						indexOfSwap = k;
+						savedX = potentiallyValidU.get(i).getX();
+						savedY = potentiallyValidU.get(i).getY();
+						// Now we set the old value to something offscreen temporarily
+						myframe.getPieceLoc().get(k).setX(-100);
+						myframe.getPieceLoc().get(k).setY(-100);
+					}
+				}
+				// Find the location in the pieceLocArray of this Valid move
+				int locationInGPL = 0;
+				for (int j = 0; j < myframe.getPieceLoc().size(); j++)
+				{
+					if (myframe.getPieceLoc().get(j).getName().compareTo(potentiallyValidU.get(i).getName()) == 0)
+					{
+						locationInGPL = j;
+					}
+				}
+				// Now that we have the location in the getPieceLoc array we update the coordinates
+				int oldLocX = myframe.getPieceLoc().get(locationInGPL).getX();
+				int oldLocY = myframe.getPieceLoc().get(locationInGPL).getY();
+				myframe.getPieceLoc().get(locationInGPL).setX(potentiallyValidU.get(i).getX());
+				myframe.getPieceLoc().get(locationInGPL).setY(potentiallyValidU.get(i).getY());
+				// Now determine if the king is in check
+				if (!Check(true, false))
+				{
+					myframe.addValidLocU(potentiallyValidU.get(i));
+				}
+				if (indexOfSwap >= 0)
+				{
+					// Putting it back where we found it
+					myframe.getPieceLoc().get(locationInGPL).setX(oldLocX);
+					myframe.getPieceLoc().get(locationInGPL).setY(oldLocY);
+				}
+			}
+		}
+		else if (((potentiallyValidC.size() > 0) && myframe.checkComp) && checkRequired)
+		{
+			// User is in check.
+			for (int i = 0; i < potentiallyValidC.size(); i++)
+			{
+				// First we remove any piece currently add the ith potentially valid user move
+				int savedX = 0;
+				int savedY = 0;
+				int indexOfSwap = -1;
+				for (int k = 0; k < myframe.getPieceLoc().size(); k++)
+				{
+					if ((potentiallyValidC.get(i).getX() == myframe.getPieceLoc().get(k).getX()) && (potentiallyValidC.get(i).getY() == myframe.getPieceLoc().get(k).getY()))
+					{
+						indexOfSwap = k;
+						savedX = potentiallyValidC.get(i).getX();
+						savedY = potentiallyValidC.get(i).getY();
+						// Now we set the old value to something offscreen temporarily
+						myframe.getPieceLoc().get(k).setX(-100);
+						myframe.getPieceLoc().get(k).setY(-100);
+					}
+				}
+				// Find the location in the pieceLocArray of this Valid move
+				int locationInGPL = 0;
+				for (int j = 0; j < myframe.getPieceLoc().size(); j++)
+				{
+					if (myframe.getPieceLoc().get(j).getName().compareTo(potentiallyValidC.get(i).getName()) == 0)
+					{
+						locationInGPL = j;
+					}
+				}
+				// Now that we have the location in the getPieceLoc array we update the coordinates
+				int oldLocX = myframe.getPieceLoc().get(locationInGPL).getX();
+				int oldLocY = myframe.getPieceLoc().get(locationInGPL).getY();
+				myframe.getPieceLoc().get(locationInGPL).setX(potentiallyValidC.get(i).getX());
+				myframe.getPieceLoc().get(locationInGPL).setY(potentiallyValidC.get(i).getY());
+				// Now determine if the king is in check
+				if (!Check(false, false))
+				{
+					myframe.addValidLocC(potentiallyValidC.get(i));
+				}
+				if (indexOfSwap >= 0)
+				{
+					// Putting it back where we found it
+					myframe.getPieceLoc().get(locationInGPL).setX(oldLocX);
+					myframe.getPieceLoc().get(locationInGPL).setY(oldLocY);
+				}
+			}
+		}
+		else
+		{
+			if (p.isType())
+			{
+				for (int i = 0; i < potentiallyValidU.size(); i++)
+				{
+					myframe.addValidLocU(potentiallyValidU.get(i));
+				}
+			}
+			else
+			{
+				for (int i = 0; i < potentiallyValidC.size(); i++)
+				{
+					myframe.addValidLocC(potentiallyValidC.get(i));
+				}
+			}
+		}
+	}
+	Boolean[] generateKnightMoves(ChessPiece p, boolean kingFlag, boolean checkRequired)
+	{
+		ArrayList<ChessPiece> arrChessPieces = myframe.getPieceLoc(); // Get array of piece locations
+		ArrayList<ChessPiece> moveArr = new ArrayList<ChessPiece>(); // Temporary array of moves
+		boolean pieceType = p.isType() ; // Set pieceType
+		
+		String nm = p.getName(); 
+		
+		if(p.isType() == true) // Add all possible 8 knight moves
+		{ 
+			moveArr.add(new ChessPiece(p.getX()+75, p.getY()-150, nm, pieceType)); 
+			moveArr.add(new ChessPiece(p.getX()+150, p.getY()-75, nm, pieceType)); 
+			moveArr.add(new ChessPiece(p.getX()+150, p.getY()+75, nm, pieceType)); 
+			moveArr.add(new ChessPiece(p.getX()+75, p.getY()+150, nm, pieceType)); 
+			moveArr.add(new ChessPiece(p.getX()-75, p.getY()+150, nm, pieceType)); 
+			moveArr.add(new ChessPiece(p.getX()-150, p.getY()+75, nm, pieceType)); 
+			moveArr.add(new ChessPiece(p.getX()-150, p.getY()-75, nm, pieceType)); 
+			moveArr.add(new ChessPiece(p.getX()-75, p.getY()-150, nm, pieceType)); 			
+		}
+		
+		Boolean[] boolArr = new Boolean[8]; // Boolean array to mark invalid moves 
+		Arrays.fill(boolArr, Boolean.FALSE);
+		for(int j = 0; j < arrChessPieces.size(); j++)
+		{
+			for (int i = 0; i < moveArr.size(); i++) 
+			{
+				if(arrChessPieces.get(j).getX() == moveArr.get(i).getX() && arrChessPieces.get(j).getY() == moveArr.get(i).getY()) // If same coordinates
+				{
+					if(arrChessPieces.get(j).isType() == pieceType) boolArr[i] = true; // If pieces are of same type -> Invalid user position 		
+					if(kingFlag) { if(arrChessPieces.get(j).getName().substring(5,7).equals("kn")) boolArr[i] = true; }
+				}
+			}
+		}
+		// If any of moveArr is negative.
+		for (int i = 0; i < moveArr.size(); i++)
+		{
+			if (((moveArr.get(i).getX() < 0) || (moveArr.get(i).getX() > 525)) || ((moveArr.get(i).getY() < 50) || (moveArr.get(i).getY() > 575)))
+			{
+				moveArr.remove(i);
+				i = i-1;
+			}
+		}
+		// Reducing the size of the list if they are in check.
+		if ((((moveArr.size() > 0) && myframe.checkUser) && (p.isType() == true)) && checkRequired)
+		{
+			// User is in check.
+			for (int i = 0; i < moveArr.size(); i++)
+			{
+				// First we remove any piece currently add the ith potentially valid user move
+				int savedX = 0;
+				int savedY = 0;
+				int indexOfSwap = -1;
+				for (int k = 0; k < myframe.getPieceLoc().size(); k++)
+				{
+					if ((moveArr.get(i).getX() == myframe.getPieceLoc().get(k).getX()) && (moveArr.get(i).getY() == myframe.getPieceLoc().get(k).getY()))
+					{
+						indexOfSwap = k;
+						savedX = moveArr.get(i).getX();
+						savedY = moveArr.get(i).getY();
+						// Now we set the old value to something offscreen temporarily
+						myframe.getPieceLoc().get(k).setX(-100);
+						myframe.getPieceLoc().get(k).setY(-100);
+					}
+				}
+				// Find the location in the pieceLocArray of this Valid move
+				int locationInGPL = 0;
+				for (int j = 0; j < myframe.getPieceLoc().size(); j++)
+				{
+					if (myframe.getPieceLoc().get(j).getName().compareTo(moveArr.get(i).getName()) == 0)
+					{
+						locationInGPL = j;
+					}
+				}
+				// Now that we have the location in the getPieceLoc array we update the coordinates
+				int oldLocX = myframe.getPieceLoc().get(locationInGPL).getX();
+				int oldLocY = myframe.getPieceLoc().get(locationInGPL).getY();
+				myframe.getPieceLoc().get(locationInGPL).setX(moveArr.get(i).getX());
+				myframe.getPieceLoc().get(locationInGPL).setY(moveArr.get(i).getY());
+				// Now determine if the king is in check
+				if (!Check(true, false))
+				{
+					myframe.addValidLocU(moveArr.get(i));
+				}
+				if (indexOfSwap >= 0)
+				{
+					// Putting it back where we found it
+					myframe.getPieceLoc().get(locationInGPL).setX(oldLocX);
+					myframe.getPieceLoc().get(locationInGPL).setY(oldLocY);
+				}
+			}
+			myframe.setValidLocU(moveArr);
+		}
+		else if ((((moveArr.size() > 0) && myframe.checkComp) && (p.isType() == false)) && checkRequired)
+		{
+			// User is in check.
+			for (int i = 0; i < moveArr.size(); i++)
+			{
+				// First we remove any piece currently add the ith potentially valid user move
+				int savedX = 0;
+				int savedY = 0;
+				int indexOfSwap = -1;
+				for (int k = 0; k < myframe.getPieceLoc().size(); k++)
+				{
+					if ((moveArr.get(i).getX() == myframe.getPieceLoc().get(k).getX()) && (moveArr.get(i).getY() == myframe.getPieceLoc().get(k).getY()))
+					{
+						indexOfSwap = k;
+						savedX = moveArr.get(i).getX();
+						savedY = moveArr.get(i).getY();
+						// Now we set the old value to something offscreen temporarily
+						myframe.getPieceLoc().get(k).setX(-100);
+						myframe.getPieceLoc().get(k).setY(-100);
+					}
+				}
+				// Find the location in the pieceLocArray of this Valid move
+				int locationInGPL = 0;
+				for (int j = 0; j < myframe.getPieceLoc().size(); j++)
+				{
+					if (myframe.getPieceLoc().get(j).getName().compareTo(moveArr.get(i).getName()) == 0)
+					{
+						locationInGPL = j;
+					}
+				}
+				// Now that we have the location in the getPieceLoc array we update the coordinates
+				int oldLocX = myframe.getPieceLoc().get(locationInGPL).getX();
+				int oldLocY = myframe.getPieceLoc().get(locationInGPL).getY();
+				myframe.getPieceLoc().get(locationInGPL).setX(moveArr.get(i).getX());
+				myframe.getPieceLoc().get(locationInGPL).setY(moveArr.get(i).getY());
+				// Now determine if the king is in check
+				if (!Check(true, false))
+				{
+					myframe.addValidLocC(moveArr.get(i));
+				}
+				if (indexOfSwap >= 0)
+				{
+					// Putting it back where we found it
+					myframe.getPieceLoc().get(locationInGPL).setX(oldLocX);
+					myframe.getPieceLoc().get(locationInGPL).setY(oldLocY);
+				}
+				
+			}
+			myframe.setValidLocC(moveArr);
+		}
+		if(!kingFlag)
+		{
+			for(int i = 0; i < moveArr.size(); i++)
+			{
+				if(!boolArr[i]) // If move is valid 
+				{
+					if(p.isType() == true) myframe.addValidLocU(moveArr.get(i)); // Add to list of user moves
+					if(p.isType() == false) myframe.addValidLocC(moveArr.get(i)); // Add to list of computer moves
+				}
+			}
+		}
+		return boolArr; 
+	}
+
+	
+	// Helper function for generateRookMoves() and generateBishopMoves()
+	private boolean generateRookMovesHelper(ArrayList<ChessPiece> moveArr, ChessPiece p2, int myX, int myY)  
+	{
+		boolean exists = false; 
+		ArrayList<ChessPiece> arrChessPieces = myframe.getPieceLoc(); // Get array of piece locations
+		for(int i = 0; i < arrChessPieces.size(); i++) // Search for pre-existing piece in pieceLocations 
+		{
+			if(arrChessPieces.get(i).getX() == myX && arrChessPieces.get(i).getY() == myY) // If coordinates match 
+			{
+				// 1. If enemy piece, add to list! (Can kill)
+				// 2. If piece of same type, then don't add.
+				// 3. Either way - a piece obstructs the rook's path and the rook cannot go further. Break. 
+				if(arrChessPieces.get(i).isType() != p2.isType()) // If enemy piece 
+				{
+					moveArr.add(p2); // Add to list if enemy piece (can kill piece) 
+				}
+				exists = true; // A piece obstructs rook's path and rook cannot go further. Break. 
+				break;
+			}
+		}
+		if(!exists) // If position is not already taken, add position to list!
+		{
+			moveArr.add(p2); // Add position to list of possible moves
+			return true; // Success! 
+		}
+		// Else, quit function if position is taken by another piece  
+		else return false; // Failure!
+		
+	}
+	
+	private void generateRookMoves(ChessPiece p, boolean checkRequired)
+	{
+		ArrayList<ChessPiece> moveArr = new ArrayList<ChessPiece>(); // Temporary array of moves
+		boolean pieceType = p.isType(); // If computer piece
+//		if(p.isType() == true) pieceType = true; // If user piece 
+		
+		int myX = p.getX();
+		int myY = p.getY();
+		while(myY >= 0) // Go vertically upwards
+		{
+			myY -= 75;
+			ChessPiece p2 = new ChessPiece(p.getX(), myY, p.getName(), pieceType);
+			if(!generateRookMovesHelper(moveArr, p2, p2.getX(), myY)) break;  
+		}
+		myY = p.getY();
+		while(myY <= 650) // Go vertically downwards
+		{
+			myY += 75;
+			ChessPiece p2 = new ChessPiece(p.getX(), myY, p.getName(), pieceType);
+			if(!generateRookMovesHelper(moveArr, p2, p2.getX(), myY)) break;  
+		}
+		while(myX >= 0) // Go horizontally upwards
+		{
+			myX -= 75;
+			ChessPiece p2 = new ChessPiece(myX, p.getY(), p.getName(), pieceType);
+			if(!generateRookMovesHelper(moveArr, p2, myX, p2.getY())) break;  
+		}
+		myX = p.getX();
+		while(myX <= 600) // Go horizontally downwards
+		{
+			myX += 75;
+			ChessPiece p2 = new ChessPiece(myX, p.getY(), p.getName(), pieceType);
+			if(!generateRookMovesHelper(moveArr, p2, myX, p2.getY())) break;  
+		}
+		// If any of moveArr is negative.
+		for (int i = 0; i < moveArr.size(); i++)
+		{
+			if (((moveArr.get(i).getX() < 0) || (moveArr.get(i).getX() > 525)) || ((moveArr.get(i).getY() < 50) || (moveArr.get(i).getY() > 575)))
+			{
+				moveArr.remove(i);
+				i = i-1;
+			}
+		}
+		// Reducing the size of the valid moves if they are in check.
+		if ((((moveArr.size() > 0) && myframe.checkUser) && (p.isType() == true)) && checkRequired)
+		{
+			// User is in check.
+			for (int i = 0; i < moveArr.size(); i++)
+			{
+				// First we remove any piece currently add the ith potentially valid user move
+				int savedX = 0;
+				int savedY = 0;
+				int indexOfSwap = -1;
+				for (int k = 0; k < myframe.getPieceLoc().size(); k++)
+				{
+					if ((moveArr.get(i).getX() == myframe.getPieceLoc().get(k).getX()) && (moveArr.get(i).getY() == myframe.getPieceLoc().get(k).getY()))
+					{
+						indexOfSwap = k;
+						savedX = moveArr.get(i).getX();
+						savedY = moveArr.get(i).getY();
+						// Now we set the old value to something offscreen temporarily
+						myframe.getPieceLoc().get(k).setX(-100);
+						myframe.getPieceLoc().get(k).setY(-100);
+					}
+				}
+				// Find the location in the pieceLocArray of this Valid move
+				int locationInGPL = 0;
+				for (int j = 0; j < myframe.getPieceLoc().size(); j++)
+				{
+					if (myframe.getPieceLoc().get(j).getName().compareTo(moveArr.get(i).getName()) == 0)
+					{
+						locationInGPL = j;
+					}
+				}
+				// Now that we have the location in the getPieceLoc array we update the coordinates
+				int oldLocX = myframe.getPieceLoc().get(locationInGPL).getX();
+				int oldLocY = myframe.getPieceLoc().get(locationInGPL).getY();
+				myframe.getPieceLoc().get(locationInGPL).setX(moveArr.get(i).getX());
+				myframe.getPieceLoc().get(locationInGPL).setY(moveArr.get(i).getY());
+				// Now determine if the king is in check
+				if (!Check(true, false))
+				{
+					myframe.addValidLocU(moveArr.get(i));
+				}
+				if (indexOfSwap >= 0)
+				{
+					// Then we need to put the piece back at it's original location
+					myframe.getPieceLoc().get(locationInGPL).setX(oldLocX);
+					myframe.getPieceLoc().get(locationInGPL).setY(oldLocY);
+				}
+			}
+		}
+		else if ((((moveArr.size() > 0) && myframe.checkComp) && (p.isType() == false)) && checkRequired)
+		{
+			// User is in check.
+			for (int i = 0; i < moveArr.size(); i++)
+			{
+				// First we remove any piece currently add the ith potentially valid user move
+				int savedX = 0;
+				int savedY = 0;
+				int indexOfSwap = -1;
+				for (int k = 0; k < myframe.getPieceLoc().size(); k++)
+				{
+					if ((moveArr.get(i).getX() == myframe.getPieceLoc().get(k).getX()) && (moveArr.get(i).getY() == myframe.getPieceLoc().get(k).getY()))
+					{
+						indexOfSwap = k;
+						savedX = moveArr.get(i).getX();
+						savedY = moveArr.get(i).getY();
+						// Now we set the old value to something offscreen temporarily
+						myframe.getPieceLoc().get(k).setX(-100);
+						myframe.getPieceLoc().get(k).setY(-100);
+					}
+				}
+				// Find the location in the pieceLocArray of this Valid move
+				int locationInGPL = 0;
+				for (int j = 0; j < myframe.getPieceLoc().size(); j++)
+				{
+					if (myframe.getPieceLoc().get(j).getName().compareTo(moveArr.get(i).getName()) == 0)
+					{
+						locationInGPL = j;
+					}
+				}
+				// Now that we have the location in the getPieceLoc array we update the coordinates
+				int oldLocX = myframe.getPieceLoc().get(locationInGPL).getX();
+				int oldLocY = myframe.getPieceLoc().get(locationInGPL).getY();
+				myframe.getPieceLoc().get(locationInGPL).setX(moveArr.get(i).getX());
+				myframe.getPieceLoc().get(locationInGPL).setY(moveArr.get(i).getY());
+				// Now determine if the king is in check
+				if (!Check(true, false))
+				{
+					myframe.addValidLocC(moveArr.get(i));
+				}
+				if (indexOfSwap >= 0)
+				{
+					// Then we need to put the piece back at it's original location
+					myframe.getPieceLoc().get(locationInGPL).setX(oldLocX);
+					myframe.getPieceLoc().get(locationInGPL).setY(oldLocY);
+				}
+			}
+		}
+		if(pieceType == true) myframe.appendValidLocU(moveArr); // Add to list of user moves
+		if(pieceType == false) myframe.appendValidLocC(moveArr); // Add to list of computer moves
+	}
+	
+	private void generateBishopMoves(ChessPiece p, boolean checkRequired)
+	{
+		ArrayList<ChessPiece> moveArr = new ArrayList<ChessPiece>(); // Temporary array of moves
+		boolean pieceType = p.isType(); // If computer piece
+//		if(p.isType() == true) pieceType = true; // If user piece 
+		
+		int myX = p.getX();
+		int myY = p.getY();
+		while(myY >= 0 && myX >= 0) // Go NorthWest
+		{
+			myY -= 75;
+			myX -= 75;
+			ChessPiece p2 = new ChessPiece(myX, myY, p.getName(), pieceType);
+			if(!generateRookMovesHelper(moveArr, p2, myX, myY)) break;  
+		}
+		myX = p.getX();
+		myY = p.getY();
+		while(myY <= 650 && myX >= 0) // Go SouthWest
+		{
+			myY += 75;
+			myX -= 75;
+			ChessPiece p2 = new ChessPiece(myX, myY, p.getName(), pieceType);
+			if(!generateRookMovesHelper(moveArr, p2, myX, myY)) break;  
+		}
+		myX = p.getX();
+		myY = p.getY();
+		while(myY <= 650 && myX <= 600) // Go SouthEast
+		{
+			myY += 75;
+			myX += 75;
+			ChessPiece p2 = new ChessPiece(myX, myY, p.getName(), pieceType);
+			if(!generateRookMovesHelper(moveArr, p2, myX, myY)) break;  
+		}
+		myX = p.getX();
+		myY = p.getY();
+		while(myY >= 0 && myX <= 600) // Go NorthEast
+		{
+			myY -= 75;
+			myX += 75;
+			ChessPiece p2 = new ChessPiece(myX, myY, p.getName(), pieceType);
+			if(!generateRookMovesHelper(moveArr, p2, myX, myY)) break;  
+		}
+		// If any of moveArr is negative.
+		for (int i = 0; i < moveArr.size(); i++)
+		{
+			if (((moveArr.get(i).getX() < 0) || (moveArr.get(i).getX() > 525)) || ((moveArr.get(i).getY() < 50) || (moveArr.get(i).getY() > 575)))
+			{
+				moveArr.remove(i);
+				i = i-1;
+			}
+		}
+		if ((((moveArr.size() > 0) && myframe.checkUser) && (p.isType() == true)) && checkRequired)
+		{
+			// User is in check.
+			for (int i = 0; i < moveArr.size(); i++)
+			{
+				// First we remove any piece currently add the ith potentially valid user move
+				int savedX = 0;
+				int savedY = 0;
+				int indexOfSwap = -1;
+				for (int k = 0; k < myframe.getPieceLoc().size(); k++)
+				{
+					if ((moveArr.get(i).getX() == myframe.getPieceLoc().get(k).getX()) && (moveArr.get(i).getY() == myframe.getPieceLoc().get(k).getY()))
+					{
+						indexOfSwap = k;
+						savedX = moveArr.get(i).getX();
+						savedY = moveArr.get(i).getY();
+						// Now we set the old value to something offscreen temporarily
+						myframe.getPieceLoc().get(k).setX(-100);
+						myframe.getPieceLoc().get(k).setY(-100);
+					}
+				}
+				// Find the location in the pieceLocArray of this Valid move
+				int locationInGPL = 0;
+				for (int j = 0; j < myframe.getPieceLoc().size(); j++)
+				{
+					if (myframe.getPieceLoc().get(j).getName().compareTo(moveArr.get(i).getName()) == 0)
+					{
+						locationInGPL = j;
+					}
+				}
+				// Now that we have the location in the getPieceLoc array we update the coordinates
+				int oldLocX = myframe.getPieceLoc().get(locationInGPL).getX();
+				int oldLocY = myframe.getPieceLoc().get(locationInGPL).getY();
+				myframe.getPieceLoc().get(locationInGPL).setX(moveArr.get(i).getX());
+				myframe.getPieceLoc().get(locationInGPL).setY(moveArr.get(i).getY());
+				// Now determine if the king is in check
+				if (!Check(true, false))
+				{
+					myframe.addValidLocU(moveArr.get(i));
+				}
+				if (indexOfSwap >= 0)
+				{
+					// Putting it back where we found it
+					myframe.getPieceLoc().get(locationInGPL).setX(oldLocX);
+					myframe.getPieceLoc().get(locationInGPL).setY(oldLocY);
+				}
+			}
+		}
+		else if ((((moveArr.size() > 0) && myframe.checkComp) && (p.isType() == false)) && checkRequired)
+		{
+			// User is in check.
+			for (int i = 0; i < moveArr.size(); i++)
+			{
+				// First we remove any piece currently add the ith potentially valid user move
+				int savedX = 0;
+				int savedY = 0;
+				int indexOfSwap = -1;
+				for (int k = 0; k < myframe.getPieceLoc().size(); k++)
+				{
+					if ((moveArr.get(i).getX() == myframe.getPieceLoc().get(k).getX()) && (moveArr.get(i).getY() == myframe.getPieceLoc().get(k).getY()))
+					{
+						indexOfSwap = k;
+						savedX = moveArr.get(i).getX();
+						savedY = moveArr.get(i).getY();
+						// Now we set the old value to something offscreen temporarily
+						myframe.getPieceLoc().get(k).setX(-100);
+						myframe.getPieceLoc().get(k).setY(-100);
+					}
+				}
+				// Find the location in the pieceLocArray of this Valid move
+				int locationInGPL = 0;
+				for (int j = 0; j < myframe.getPieceLoc().size(); j++)
+				{
+					if (myframe.getPieceLoc().get(j).getName().compareTo(moveArr.get(i).getName()) == 0)
+					{
+						locationInGPL = j;
+					}
+				}
+				// Now that we have the location in the getPieceLoc array we update the coordinates
+				int oldLocX = myframe.getPieceLoc().get(locationInGPL).getX();
+				int oldLocY = myframe.getPieceLoc().get(locationInGPL).getY();
+				myframe.getPieceLoc().get(locationInGPL).setX(moveArr.get(i).getX());
+				myframe.getPieceLoc().get(locationInGPL).setY(moveArr.get(i).getY());
+				// Now determine if the king is in check
+				if (!Check(true, false))
+				{
+					myframe.addValidLocC(moveArr.get(i));
+				}
+				if (indexOfSwap >= 0)
+				{
+					// Putting it back where we found it
+					myframe.getPieceLoc().get(locationInGPL).setX(oldLocX);
+					myframe.getPieceLoc().get(locationInGPL).setY(oldLocY);
+				}
+			}
+		}
+		if(pieceType == true) myframe.appendValidLocU(moveArr); // Add to list of user moves
+		if(pieceType == false) myframe.appendValidLocC(moveArr); // Add to list of computer moves
+	}
+	
+	// Generate Queen moves (combination of rook + bishop moves) 
+	private void generateQueenMoves(ChessPiece p, boolean checkRequired)
+	{
+		generateRookMoves(p, checkRequired); // Vertical + Horizontal moves
+		generateBishopMoves(p, checkRequired); // Diagonal moves 
+	}
+	
+	private String checkKingPos(ChessPiece p2, int myX, int myY)  
+	{
+		ArrayList<ChessPiece> arrChessPieces = myframe.getPieceLoc(); // Get array of piece locations
+		for(int i = 0; i < arrChessPieces.size(); i++) // Search for pre-existing piece in pieceLocations 
+		{
+			if(arrChessPieces.get(i).getX() == myX && arrChessPieces.get(i).getY() == myY) // If coordinates match 
+			{
+				// 1. If enemy piece, return piece name!
+				// 2. If piece of same type, then stop. King cannot go further.  
+				if(arrChessPieces.get(i).isType() != p2.isType()) // If enemy piece 
+				{
+					System.out.println("Piece name: " + arrChessPieces.get(i).getName());
+					return arrChessPieces.get(i).getName();  
+				}
+				else return "-1"; // If own piece type 
+			}
+		}
+		return "1"; // If no position conflicts - all is good!  
+	}
+	
+	private boolean checkKingMove(ChessPiece p)
+	{
+		int myX = p.getX();
+		int myY = p.getY();
+		boolean pieceType = p.isType(); 
+		int ctr = 0; 
+		while(myY >= 0 && myX >= 0) // Go NorthWest
+		{
+			ChessPiece p2 = new ChessPiece(myX, myY, p.getName(), pieceType);
+			String ans = checkKingPos(p2, myX, myY);
+			if(ans.equals("-1")) break; // Conflicting piece is of same type
+			if(!ans.equals("1") && !ans.equals("-1")) // If position conflict
+			{
+				if(ans.substring(5, 7).equals("pa") || ans.substring(5, 7).equals("ki"))
+				{
+					if(ctr == 1) return false;
+					else break; 
+				}
+//				if(ctr == 1 && (ans.substring(5, 7).equals("pa") || ans.substring(5, 7).equals("ki"))) return false; // If enemy pawn/king is 1 space away 
+				else if(ans.substring(5, 7).equals("qu") || ans.substring(5, 7).equals("bi")) return false; // If enemy queen/bishop
+				else return true; 
+			}
+			myX -= 75;
+			myY -= 75;
+			ctr++; 
+		}
+		ctr = 0; 
+		myX = p.getX();
+		myY = p.getY();
+		while(myY <= 650 && myX >= 0) // Go SouthWest
+		{
+			ChessPiece p2 = new ChessPiece(myX, myY, p.getName(), pieceType);
+			String ans = checkKingPos(p2, myX, myY);
+			if(ans.equals("-1")) break; // Conflicting piece is of same type
+			if(!ans.equals("1") && !ans.equals("-1")) // If position conflict
+			{
+				if(ans.substring(5, 7).equals("pa") || ans.substring(5, 7).equals("ki"))
+				{
+					if(ctr == 1) return false;
+					else break; 
+				}
+//				if(ctr == 1 && (ans.substring(5, 7).equals("pa") || ans.substring(5, 7).equals("ki"))) return false; // If enemy pawn/king is 1 space away 
+				else if(ans.substring(5, 7).equals("qu") || ans.substring(5, 7).equals("bi")) return false; // If enemy queen/bishop
+				else return true; 
+			}
+			myX -= 75;
+			myY += 75;
+			ctr++; 
+		}
+		myX = p.getX();
+		myY = p.getY();
+		ctr = 0; 
+		while(myY <= 650 && myX <= 600) // Go SouthEast
+		{
+			ChessPiece p2 = new ChessPiece(myX, myY, p.getName(), pieceType);
+			String ans = checkKingPos(p2, myX, myY);
+			if(ans.equals("-1")) break; // Conflicting piece is of same type
+			if(!ans.equals("1") && !ans.equals("-1")) // If position conflict
+			{
+				if(ans.substring(5, 7).equals("pa") || ans.substring(5, 7).equals("ki"))
+				{
+					if(ctr == 1) return false;
+					else break; 
+				}
+//				if(ctr == 1 && (ans.substring(5, 7).equals("pa") || ans.substring(5, 7).equals("ki"))) return false; // If enemy pawn/king is 1 space away 
+				else if(ans.substring(5, 7).equals("qu") || ans.substring(5, 7).equals("bi")) return false; // If enemy queen/bishop
+				else return true; 
+			}
+			myX += 75;
+			myY += 75;
+			ctr++; 
+		}
+		ctr = 0;
+		myX = p.getX();
+		myY = p.getY();
+		while(myY >= 0 && myX <= 600) // Go NorthEast
+		{
+			ChessPiece p2 = new ChessPiece(myX, myY, p.getName(), pieceType);
+			String ans = checkKingPos(p2, myX, myY);
+			if(ans.equals("-1")) break; // Conflicting piece is of same type
+			if(!ans.equals("1") && !ans.equals("-1")) // If position conflict
+			{
+				if(ans.substring(5, 7).equals("pa") || ans.substring(5, 7).equals("ki"))
+				{
+					if(ctr == 1) return false;
+					else break; 
+				}
+//				if(ctr == 1 && (ans.substring(5, 7).equals("pa") || ans.substring(5, 7).equals("ki"))) return false; // If enemy pawn/king is 1 space away
+//				else if((ans.substring(5, 7).equals("pa") || ans.substring(5, 7).equals("ki"))) break;
+				else if(ans.substring(5, 7).equals("qu") || ans.substring(5, 7).equals("bi")) return false; // If enemy queen/bishop
+				else return true; 
+			}
+			myY -= 75;
+			myX += 75;
+			ctr++; 
+		}
+		ctr = 0;
+		myX = p.getX();
+		myY = p.getY();
+		while(myX >= 0) // Go West
+		{
+			ChessPiece p2 = new ChessPiece(myX, myY, p.getName(), pieceType);
+			String ans = checkKingPos(p2, myX, myY);
+			if(ans.equals("-1")) break; // Conflicting piece is of same type
+			if(!ans.equals("1") && !ans.equals("-1")) // If position conflict
+			{
+				if(ctr == 1 && (ans.substring(5, 7).equals("ki"))) return false; // If enemy pawn/king is 1 space away 
+				else if(ans.substring(5, 7).equals("qu") || ans.substring(5, 7).equals("ro")) return false; // If enemy queen/bishop
+				else return true; 
+			}
+			myX -= 75;
+			ctr++; 
+		}
+		ctr = 0;
+		myX = p.getX();
+		myY = p.getY();
+		while(myX <= 600) // Go East
+		{
+			ChessPiece p2 = new ChessPiece(myX, myY, p.getName(), pieceType);
+			String ans = checkKingPos(p2, myX, myY);
+			if(ans.equals("-1")) break; // Conflicting piece is of same type
+			if(!ans.equals("1") && !ans.equals("-1")) // If position conflict
+			{
+				if(ctr == 1 && (ans.substring(5, 7).equals("ki"))) return false; // If enemy pawn/king is 1 space away 
+				else if(ans.substring(5, 7).equals("qu") || ans.substring(5, 7).equals("ro")) return false; // If enemy queen/bishop
+				else return true; 
+			}
+			myX += 75;
+			ctr++; 
+		}
+		ctr = 0;
+		myX = p.getX();
+		myY = p.getY();
+		while(myY <= 600) // Go South
+		{
+			ChessPiece p2 = new ChessPiece(myX, myY, p.getName(), pieceType);
+			String ans = checkKingPos(p2, myX, myY);
+			if(ans.equals("-1")) break; // Conflicting piece is of same type
+			if(!ans.equals("1") && !ans.equals("-1")) // If position conflict
+			{
+				if(ctr == 1 && (ans.substring(5, 7).equals("ki"))) return false; // If enemy pawn/king is 1 space away 
+				else if(ans.substring(5, 7).equals("qu") || ans.substring(5, 7).equals("ro")) return false; // If enemy queen/bishop
+				else return true; 
+			}
+			myY += 75;
+			ctr++; 
+		}
+		ctr = 0;
+		myX = p.getX();
+		myY = p.getY();
+		while(myY >= 0) // Go North
+		{
+			ChessPiece p2 = new ChessPiece(myX, myY, p.getName(), pieceType);
+			String ans = checkKingPos(p2, myX, myY);
+			if(ans.equals("-1")) break; // Conflicting piece is of same type
+			if(!ans.equals("1") && !ans.equals("-1")) // If position conflict
+			{
+				if(ctr == 1 && (ans.substring(5, 7).equals("ki"))) return false; // If enemy pawn/king is 1 space away 
+				else if(ans.substring(5, 7).equals("qu") || ans.substring(5, 7).equals("ro")) return false; // If enemy queen/bishop
+				else return true; 
+			}
+			myY -= 75;
+			ctr++; 
+		}
+		return true; 
+	}
+	
+	private void generateKingMoves(ChessPiece p, boolean checkRequired)
+	{
+		ArrayList<ChessPiece> moveArr = new ArrayList<ChessPiece>(); // Temporary array of moves
+		boolean pieceType = p.isType();
+		String nm = p.getName(); 
+		moveArr.add(new ChessPiece(p.getX(), p.getY()-75, nm, pieceType)); 
+		moveArr.add(new ChessPiece(p.getX()+75, p.getY()-75, nm, pieceType));
+		moveArr.add(new ChessPiece(p.getX()+75, p.getY(), nm, pieceType));
+		moveArr.add(new ChessPiece(p.getX()+75, p.getY()+75, nm, pieceType));
+		moveArr.add(new ChessPiece(p.getX(), p.getY()+75, nm, pieceType));
+		moveArr.add(new ChessPiece(p.getX()-75, p.getY()+75, nm, pieceType));
+		moveArr.add(new ChessPiece(p.getX()-75, p.getY(), nm, pieceType));
+		moveArr.add(new ChessPiece(p.getX()-75, p.getY()-75, nm, pieceType));
+		
+		Boolean[] boolArr = new Boolean[8]; // Boolean array to mark invalid moves 
+		Arrays.fill(boolArr, Boolean.FALSE);
+		
+		for(int i = 0; i < moveArr.size(); i++) // Check if surrounding positions have piece of same type -> if so, invalid position!   
+		{
+			if(checkKingPos(moveArr.get(i), moveArr.get(i).getX(), moveArr.get(i).getY()) == "-1") boolArr[i] = true;
+		}
+		
+		// Check for knights 
+		Boolean[] myBoolArr = generateKnightMoves(p, true, false); 
+		for(int i = 0; i < myBoolArr.length; i++)
+		{
+			if(myBoolArr[i]) boolArr[i] = true;
+		}
+
+		
+		for(int i = 0; i < moveArr.size(); i++) // Check if surrounding positions are valid  
+		{
+			if(moveArr.get(i).getX() == 525 && moveArr.get(i).getY() == 350)
+			{
+				System.out.println("here");
+			}
+			if(!checkKingMove(moveArr.get(i))) boolArr[i] = true;
+		}
+		if ((((moveArr.size() > 0) && myframe.checkUser) && (p.isType() == true)) && checkRequired)
+		{
+			// User is in check.
+			for (int i = 0; i < moveArr.size(); i++)
+			{
+				// First we remove any piece currently add the ith potentially valid user move
+				int savedX = 0;
+				int savedY = 0;
+				int indexOfSwap = -1;
+				for (int k = 0; k < myframe.getPieceLoc().size(); k++)
+				{
+					if ((moveArr.get(i).getX() == myframe.getPieceLoc().get(k).getX()) && (moveArr.get(i).getY() == myframe.getPieceLoc().get(k).getY()))
+					{
+						indexOfSwap = k;
+						savedX = moveArr.get(i).getX();
+						savedY = moveArr.get(i).getY();
+						// Now we set the old value to something offscreen temporarily
+						myframe.getPieceLoc().get(k).setX(-100);
+						myframe.getPieceLoc().get(k).setY(-100);
+					}
+				}
+				// Find the location in the pieceLocArray of this Valid move
+				int locationInGPL = 0;
+				for (int j = 0; j < myframe.getPieceLoc().size(); j++)
+				{
+					if (myframe.getPieceLoc().get(j).getName().compareTo(moveArr.get(i).getName()) == 0)
+					{
+						locationInGPL = j;
+					}
+				}
+				// Now that we have the location in the getPieceLoc array we update the coordinates
+				int oldLocX = myframe.getPieceLoc().get(locationInGPL).getX();
+				int oldLocY = myframe.getPieceLoc().get(locationInGPL).getY();
+				myframe.getPieceLoc().get(locationInGPL).setX(moveArr.get(i).getX());
+				myframe.getPieceLoc().get(locationInGPL).setY(moveArr.get(i).getY());
+				// Now determine if the king is in check
+				if (!Check(true, false))
+				{
+					myframe.addValidLocU(moveArr.get(i));
+				}
+				if (indexOfSwap >= 0)
+				{
+					// Putting it back where we found it
+					myframe.getPieceLoc().get(locationInGPL).setX(oldLocX);
+					myframe.getPieceLoc().get(locationInGPL).setY(oldLocY);
+				}
+			}
+			myframe.setValidLocU(moveArr);
+		}
+		else if ((((moveArr.size() > 0) && myframe.checkComp) && (p.isType() == false)) && checkRequired)
+		{
+			// User is in check.
+			for (int i = 0; i < moveArr.size(); i++)
+			{
+				// First we remove any piece currently add the ith potentially valid user move
+				int savedX = 0;
+				int savedY = 0;
+				int indexOfSwap = -1;
+				for (int k = 0; k < myframe.getPieceLoc().size(); k++)
+				{
+					if ((moveArr.get(i).getX() == myframe.getPieceLoc().get(k).getX()) && (moveArr.get(i).getY() == myframe.getPieceLoc().get(k).getY()))
+					{
+						indexOfSwap = k;
+						savedX = moveArr.get(i).getX();
+						savedY = moveArr.get(i).getY();
+						// Now we set the old value to something offscreen temporarily
+						myframe.getPieceLoc().get(k).setX(-100);
+						myframe.getPieceLoc().get(k).setY(-100);
+					}
+				}
+				// Find the location in the pieceLocArray of this Valid move
+				int locationInGPL = 0;
+				for (int j = 0; j < myframe.getPieceLoc().size(); j++)
+				{
+					if (myframe.getPieceLoc().get(j).getName().compareTo(moveArr.get(i).getName()) == 0)
+					{
+						locationInGPL = j;
+					}
+				}
+				// Now that we have the location in the getPieceLoc array we update the coordinates
+				int oldLocX = myframe.getPieceLoc().get(locationInGPL).getX();
+				int oldLocY = myframe.getPieceLoc().get(locationInGPL).getY();
+				myframe.getPieceLoc().get(locationInGPL).setX(moveArr.get(i).getX());
+				myframe.getPieceLoc().get(locationInGPL).setY(moveArr.get(i).getY());
+				// Now determine if the king is in check
+				if (!Check(true, false))
+				{
+					myframe.addValidLocC(moveArr.get(i));
+				}
+				if (indexOfSwap >= 0)
+				{
+					// Putting it back where we found it
+					myframe.getPieceLoc().get(locationInGPL).setX(oldLocX);
+					myframe.getPieceLoc().get(locationInGPL).setY(oldLocY);
+				}
+			}
+			myframe.setValidLocC(moveArr);
+		}
+		for(int i = 0; i < boolArr.length; i++)
+		{
+			if(!boolArr[i]) // If move is valid 
+			{
+				if(p.isType() == true) myframe.addValidLocU(moveArr.get(i)); // Add to list of user moves
+				else if(p.isType() == false) myframe.addValidLocC(moveArr.get(i)); // Add to list of computer moves
+			}
+		}
+			
+	}
+	
+	public boolean Check(boolean playerType, boolean checkRequired)
+	{
+		// This function simply determines if the king piece is in check. First we get the location of the king.
+		int kingLocationX = 0; // Saves the index in piece locations of the king for X
+		int kingLocationY = 0; // for Y
+		boolean inCheck = false;
+		for (int i = 0; i < myframe.getPieceLoc().size(); i++)
+		{
+			if ((myframe.getPieceLoc().get(i).isType() == playerType) && ((myframe.getPieceLoc().get(i).getName().compareTo("comp_king0") == 0) || (myframe.getPieceLoc().get(i).getName().compareTo("user_king0") == 0)))
+			{
+				kingLocationX = myframe.getPieceLoc().get(i).getX();
+				kingLocationY = myframe.getPieceLoc().get(i).getY();
+				break;
+			}
+		}
+		// Now we want to and see if there are ValidMoves from the opponent that can steal the king!
+		if (playerType)
+		{
+			// Generate valid moves for the user then remove all of them after checking
+			ArrayList<ChessPiece> arrChessPiece = myframe.getPieceLoc();
+			ArrayList<ChessPiece> emptyPieces1 = new ArrayList<ChessPiece>();
+			myframe.setValidLocU(emptyPieces1);
+			myframe.setValidLocC(emptyPieces1);
+			for (int i = 0; i < arrChessPiece.size(); i++)
+			{
+				this.genValidMoves(arrChessPiece.get(i), checkRequired);
+			}
+			for (int i = 0; i < myframe.getValidLocC().size(); i++)
+			{
+				// Checking if the location is the same.
+				if ((kingLocationX == myframe.getValidLocC().get(i).getX()) && (kingLocationY == myframe.getValidLocC().get(i).getY()))
+				{
+					// The king is in check, we set the corresponding boolean value true
+					myframe.checkUser = true;
+					inCheck = true;
+					break;
+				}
+			}
+		}
+		else
+		{
+			// Generate valid moves for the user then remove all of them after checking
+			ArrayList<ChessPiece> arrChessPiece = myframe.getPieceLoc();
+			ArrayList<ChessPiece> emptyPieces1 = new ArrayList<ChessPiece>();
+			myframe.setValidLocU(emptyPieces1);
+			myframe.setValidLocC(emptyPieces1);
+			for (int i = 0; i < arrChessPiece.size(); i++)
+			{
+				this.genValidMoves(arrChessPiece.get(i), checkRequired);
+			}
+			for (int i = 0; i < myframe.getValidLocU().size(); i++)
+			{
+				// Checking if the location is the same.
+				if ((kingLocationX == myframe.getValidLocU().get(i).getX()) && (kingLocationY == myframe.getValidLocU().get(i).getY()))
+				{
+					// The king is in check, we set the corresponding boolean value true
+					myframe.checkComp = true;
+					inCheck = true;
+					break;
+				}
+			}
+		}
+		return inCheck;
+	}
+	
+	// Generate moves for a given piece.
+	private ArrayList<ChessPiece> genValidMoves(ChessPiece p, boolean checkRequired)
+	{
+		if ((p.getName().compareTo("user_pawn0") == 0) || (p.getName().compareTo("comp_pawn0")) == 0) generatePawnMoves(p, checkRequired);
+		if ((p.getName().compareTo("user_pawn1") == 0) || (p.getName().compareTo("comp_pawn1")) == 0) generatePawnMoves(p, checkRequired);
+		if ((p.getName().compareTo("user_pawn2") == 0) || (p.getName().compareTo("comp_pawn2")) == 0) generatePawnMoves(p, checkRequired);
+		if ((p.getName().compareTo("user_pawn3") == 0) || (p.getName().compareTo("comp_pawn3")) == 0) generatePawnMoves(p, checkRequired);
+		if ((p.getName().compareTo("user_pawn4") == 0) || (p.getName().compareTo("comp_pawn4")) == 0) generatePawnMoves(p, checkRequired);
+		if ((p.getName().compareTo("user_pawn5") == 0) || (p.getName().compareTo("comp_pawn5")) == 0) generatePawnMoves(p, checkRequired);
+		if ((p.getName().compareTo("user_pawn6") == 0) || (p.getName().compareTo("comp_pawn6")) == 0) generatePawnMoves(p, checkRequired);
+		if ((p.getName().compareTo("user_pawn7") == 0) || (p.getName().compareTo("comp_pawn7")) == 0) generatePawnMoves(p, checkRequired);
+		if (p.getName().compareTo("user_knight0") == 0 || p.getName().compareTo("comp_knight0") == 0) generateKnightMoves(p,false, checkRequired);
+		if (p.getName().compareTo("user_knight1") == 0 || p.getName().compareTo("comp_knight1") == 0) generateKnightMoves(p,false, checkRequired);
+		if (p.getName().compareTo("user_rook0") == 0 || p.getName().compareTo("comp_rook0") == 0) generateRookMoves(p, checkRequired);
+		if (p.getName().compareTo("user_rook1") == 0 || p.getName().compareTo("comp_rook1") == 0) generateRookMoves(p, checkRequired);
+		if (p.getName().compareTo("user_bishop0") == 0 || p.getName().compareTo("comp_bishop0") == 0) generateBishopMoves(p, checkRequired);
+		if (p.getName().compareTo("user_bishop1") == 0 || p.getName().compareTo("comp_bishop1") == 0) generateBishopMoves(p, checkRequired);
+		if (p.getName().compareTo("user_queen0") == 0 || p.getName().compareTo("user_queen1") == 0) generateQueenMoves(p, checkRequired);
+		if (p.getName().compareTo("user_king0") == 0 || p.getName().compareTo("comp_king0") == 0) 
+		{
+			generateKingMoves(p, checkRequired);
+		}
+		
+		return null;
+	}
+	
+	
+	// Select the valid move and return an array, this function determines the 
+		private int[] selectMove()
+		{
+			int [] arr = new int[4];
+			// We generate the list of all opposite color pieces.
+			ArrayList<ChessPiece> onlyStore = new ArrayList<ChessPiece>();
+			ArrayList<ChessPiece> AIMoves = new ArrayList<ChessPiece>();
+			boolean compareVal = true;
+			// only store the moves with an opposite color piece to your own
+			if (myframe.myColor)
+			{
+				compareVal = false;
+			}
+			// Now we loop through the valid locations array and only add the pieces that match
+			for (int i = 0; i < myframe.getValidLocC().size(); i++)
+			{
+				if ((myframe.getValidLocC().get(i).isType() == compareVal) && (((myframe.getValidLocC().get(i).getX() >= 0) && (myframe.getValidLocC().get(i).getX() < 600)) && ((myframe.getValidLocC().get(i).getY() >= 50) && (myframe.getValidLocC().get(i).getY() <= 575))))
+				{
+					// Adding the chess piece to the array
+					ChessPiece chessPiece = new ChessPiece(myframe.getValidLocC().get(i).getX(),myframe.getValidLocC().get(i).getY(),myframe.getValidLocC().get(i).getName(),myframe.getValidLocC().get(i).isType());
+					onlyStore.add(chessPiece);
+				}
+			}
+			// Check if there are any moves there that can kill another piece.
+			int max = 0; // Want to find most ideal move 
+			for (int i = 0; i < onlyStore.size(); i++)
+			{
+				// Now loop through the piece lists and add any piece that has the same location as the current location in the onlyStore
+				for (int j = 0; j < myframe.getPieceLoc().size(); j++)
+				{
+					if ((myframe.getPieceLoc().get(j).getX() == onlyStore.get(i).getX()) && (myframe.getPieceLoc().get(j).getY() == onlyStore.get(i).getY())) // If coordinates match 
+					{
+						// Now we check if the piece value is higher than the current maximum.
+						
+						// 1. Pawn 
+						if (myframe.getPieceLoc().get(j).getName().substring(5, 7).equals("pa")) {
+							if (max < 1) { max = 1; AIMoves.add(onlyStore.get(i)); } 
+						}
+
+						// 2. Knight & Bishop
+						if (myframe.getPieceLoc().get(j).getName().substring(5, 7).equals("kn") || myframe.getPieceLoc().get(j).getName().substring(5, 7).equals("bi")) {					
+							if (max < 3) { 
+								max = 3;
+								if (AIMoves.size() > 0) AIMoves.remove(0); // There can be no more than 1 element						
+								AIMoves.add(onlyStore.get(i)); 
+						}} 
+						
+						// 3. Rook 
+						if (myframe.getPieceLoc().get(j).getName().substring(5, 7).equals("ro")) {					
+							if (max < 5) { 
+								max = 5;
+								if (AIMoves.size() > 0) AIMoves.remove(0); // There can be no more than 1 element						
+								AIMoves.add(onlyStore.get(i)); 
+						}}
+						
+						// 4. Queen 
+						if (myframe.getPieceLoc().get(j).getName().substring(5, 7).equals("qu")) {					
+							if (max < 7) { 
+								max = 7;
+								if (AIMoves.size() > 0) AIMoves.remove(0); // There can be no more than 1 element						
+								AIMoves.add(onlyStore.get(i)); 
+						}}
+						
+						// 5. King 
+						if (myframe.getPieceLoc().get(j).getName().substring(5, 7).equals("ki")) {					
+							if (max < 9) { 
+								max = 9;
+								if (AIMoves.size() > 0) AIMoves.remove(0); // There can be no more than 1 element						
+								AIMoves.add(onlyStore.get(i)); 
+						}}
+					}
+				}
+			}
+			// Pick most profitable move for the computer. If this is not possible, choose randomly.
+			if (AIMoves.size() > 0)
+			{
+				onlyStore = AIMoves;
+			}
+			Random rand = new Random();
+			int myNum = rand.nextInt(onlyStore.size());
+			arr[0] = onlyStore.get(myNum).getX();
+			arr[1] = onlyStore.get(myNum).getY();
+			// Now we get the starting location of this piece in the piece location dataset.
+			// Looping through the valid piece locations:
+			for (int i = 0; i < myframe.getPieceLoc().size(); i++)
+			{
+				if (myframe.getPieceLoc().get(i).getName().compareTo(onlyStore.get(myNum).getName()) == 0)
+				{
+					// Now we can record the x and y components of the original.
+					arr[2] = myframe.getPieceLoc().get(i).getX();
+					arr[3] = myframe.getPieceLoc().get(i).getY();
+					break;
+				}
+			}
+			return arr;
+		}
+	
+	public int[] translateCoordinates(String message)
+	{
+		int coordList[] = new int[4]; // Arraylist containing coordinates (origX, origY, finalX, finalY)
+		String initPos = message.substring(0, 2); // Original position 
+		String finalPos = message.substring(3, 5); // Final position 
+
+        Character origYStr = initPos.charAt(0); // Get y-coordinate of original string 
+        int origXStr = Character.getNumericValue(initPos.charAt(1)); // Get x-coordinate 
+		int origY = ((origYStr - 'A'))*75; // Convert from letter -> coordinate
+		int origX = 650-(75*origXStr); // Convert from number -> coordinate
+		coordList[1] = origX; // Add coordinate to list
+		coordList[0] = origY; 
+		
+        Character finalYStr = finalPos.charAt(0); // Get y-coordinate of final string   
+        int finalXStr = Character.getNumericValue(finalPos.charAt(1)); // Get x-coordinate of final string
+		int finalY = ((finalYStr - 'A'))*75;  // Convert from letter -> coordinate
+		int finalX = 650-(75*finalXStr);  // Convert from number -> coordinate
+ 		coordList[3] = finalX; // Add coordinate to list 
+ 		coordList[2] = finalY; 
+		
+		return coordList; 
+	}
+		
+	// This function handles all of the user moves that can be done, generating a list of valid
+	// moves for the GUI to allow that the player move.
+	// Note: Synchronized function!
+	public synchronized void userMove(Semaphore mySem)
+	{
+		myframe.panel2.tmr.start();
+		myframe.checkUser = Check(true, false);
+		if (myframe.pieceKilled)
+		{
+			// Now removing the killed piece from the board.
+			ArrayList<ChessPiece> arrPieces = myframe.getPieceLoc();
+			// now removing the c1 value.
+			for (int i = 0; i < arrPieces.size(); i++)
+			{
+				// Now checking for the piece that has the same location as the kill locations 
+				// It also needs to be a black piece killed
+				if (((myframe.killLocX == arrPieces.get(i).getX()) && (myframe.killLocY == arrPieces.get(i).getY())) && (myframe.killType == arrPieces.get(i).isType()))
+				{
+					// Now we can remove from the list.
+					arrPieces.remove(i);
+					// Setting the new set of pieces
+					myframe.setPieceLoc(arrPieces);
+					// We are finished now, worst case O(n) best case O(1).
+					break;
+				}
+			}
+			myframe.pieceKilled = false;
+		}
+		ArrayList<ChessPiece> arrChessPiece = myframe.getPieceLoc();
+		ArrayList<ChessPiece> emptyPieces1 = new ArrayList<ChessPiece>();
+		myframe.setValidLocU(emptyPieces1);
+		for (int i = 0; i < arrChessPiece.size(); i++)
+		{
+			this.genValidMoves(arrChessPiece.get(i), true);
+		}
+		// Seeing if the game is over.
+		if (myframe.getValidLocU().size() == 0)
+			{
+				// Print out that you lost.
+				System.out.println("There are no valid moves, checkmate! You lose.");
+				myframe.gameOver = true;
+				return;
+		}
+		// Looping through and removing the values needed.
+		ArrayList<ChessPiece> negativeReduction = new ArrayList<ChessPiece>();
+		negativeReduction = myframe.getValidLocU();
+		for (int i = 0; i < negativeReduction.size(); i++)
+		{
+			if ((negativeReduction.get(i).getX() < 0) || (negativeReduction.get(i).getY() < 50))
+			{
+				negativeReduction.remove(i);
+			}
+		}
+		// Now adding back
+		myframe.setValidLocU(negativeReduction);
+		// Seeing if the game is over.
+		if (myframe.getValidLocU().size() == 0)
+		{
+			// Print out that you lost.
+			System.out.println("There are no valid moves, checkmate! You lose.");
+			myframe.gameOver = true;
+			return;
+		}
+		// The user enters the location where they want to move the piece.
+		boolean validLocOld = false;
+		boolean validLocNew = false;
+		while (!(validLocOld && validLocNew))	
+		{
+			validLocOld = false;
+			validLocNew = false;
+			System.out.println("Please enter the move you want to issue:");
+			myScanner = new Scanner(System.in);
+			String userInput = myScanner.nextLine();
+			// Validating each of the 5 characters.
+			if (userInput.length() != 5)
+			{
+				System.out.println("Please enter in the following format: (Letter)(Number) (Letter)(Number)");
+				continue;
+			}
+			if (!((userInput.charAt(0) > 64) && (userInput.charAt(0) < 73)))
+			{
+				System.out.println("Please enter in the following format: (Letter)(Number) (Letter)(Number)");
+				continue;
+			}
+			if (!((userInput.charAt(1) > 47) && (userInput.charAt(1) < 58)))
+			{
+				System.out.println("Please enter in the following format: (Letter)(Number) (Letter)(Number)");
+				continue;
+			}
+			if (userInput.charAt(2) != 32)
+			{
+				System.out.println("Please enter in the following format: (Letter)(Number) (Letter)(Number)");
+				continue;
+			}
+			if (!((userInput.charAt(3) > 64) && (userInput.charAt(3) < 73)))
+			{
+				System.out.println("Please enter in the following format: (Letter)(Number) (Letter)(Number)");
+				continue;
+			}
+			if (!((userInput.charAt(4) > 47) && (userInput.charAt(4) < 58)))
+			{
+				System.out.println("Please enter in the following format: (Letter)(Number) (Letter)(Number)");
+				continue;
+			}
+			// Calling the function with the given input.
+			int[] myArr = translateCoordinates(userInput);
+			String pieceName = "";
+			// Looping now to check if there is a user Piece at the correct location
+			for (int i = 0; i < myframe.getPieceLoc().size(); i++)
+			{
+				// Checking if the current x and y value are the same for the pieces.
+				if ((myframe.getPieceLoc().get(i).getX() == myArr[0]) && (myframe.getPieceLoc().get(i).getY() == myArr[1]))
+				{
+					// Now we can confirm that the piece is indeed in the correct location.
+					validLocOld = true;
+					// Also save the type, so we can check later.
+					pieceName = myframe.getPieceLoc().get(i).getName();
+					break;
+				}		
+			}
+			// Now we check the second and the third values against the valid move set.
+			for (int i = 0; i < myframe.getValidLocU().size(); i++)
+			{
+				// Checking if the current x and y value are the same for the pieces.
+				if ((myframe.getValidLocU().get(i).getX() == myArr[2]) && (myframe.getValidLocU().get(i).getY() == myArr[3]))
+				{
+					// Now we can confirm that the piece is indeed in the correct location.
+					String compareString = myframe.getValidLocU().get(i).getName();
+					if (pieceName.compareTo(compareString) == 0)
+					{
+						validLocNew = true;
+						break;
+					}
+					continue;
+				}		
+			}
+			// Executing the move
+			if (validLocNew && validLocOld)
+			{
+				// Check first if there is someone there.
+				Component c1 = myframe.getChessBoard().findComponentAt(myArr[0], myArr[1]);
+				// myframe.layeredPane.remove(c1);
+				myframe.executeMove(myArr[2], myArr[3], myArr[0], myArr[1]);
+				// We also want to check if there was someone of the false type at that location.
+				for (int i = 0; i < myframe.getPieceLoc().size(); i++)
+				{
+					// If there is something there that is an enemy then we set myframe.pieceKilled to true.
+					if (((myframe.getPieceLoc().get(i).getX() == myArr[2]) && (myframe.getPieceLoc().get(i).getY() == myArr[3])) && (myframe.getPieceLoc().get(i).isType() == false))
+					{
+						myframe.pieceKilled = true;
+						myframe.killLocX = myArr[2];
+						myframe.killLocY = myArr[3];
+						myframe.killType = false;
+						break;
+					}
+				}
+			}
+			else
+			{
+				// This means that the move was correctly input but isn't valid.
+				myframe.gameOver = true;
+				System.out.println("You entered an invalid move, you lose.");
+				break;
+			}
+		}
+		myframe.panel2.tmr.stop();
+	}
+	// This function handles all of the computer moves, it generates a list of valid moves for the
+	// AI to use as input and handles moving the piece visually.
+	public void computerMove()
+	{
+		myframe.panel.tmr.start();
+		myframe.checkComp = Check(false, true);
+		if (myframe.checkComp)
+		{
+			System.out.println("STOP");
+		}
+		// Check if a piece was killed and remove it.
+		if (myframe.pieceKilled)
+		{
+			// Now removing the killed piece from the board.
+			ArrayList<ChessPiece> arrPieces = myframe.getPieceLoc();
+			// now removing the c1 value.
+			for (int i = 0; i < arrPieces.size(); i++)
+			{
+				// Now checking for the piece that has the same location as the kill locations 
+				// It also needs to be a black piece killed
+				if (((myframe.killLocX == arrPieces.get(i).getX()) && (myframe.killLocY == arrPieces.get(i).getY())) && (myframe.killType == arrPieces.get(i).isType()))
+				{
+					// Now we can remove from the list.
+					arrPieces.remove(i);
+					// Setting the new set of pieces
+					myframe.setPieceLoc(arrPieces);
+					// We are finished now, worst case O(n) best case O(1).
+					break;
+				}
+			}
+			myframe.pieceKilled = false;
+		}
+		// Simulating a computer turn.
+		ArrayList<ChessPiece> arrChessPiece = myframe.getPieceLoc();
+		ArrayList<ChessPiece> emptyPieces1 = new ArrayList<ChessPiece>();
+		myframe.setValidLocC(emptyPieces1);
+		myframe.setValidLocU(emptyPieces1);
+		// USER MOVES ARE BEING ADDED TO THE VALID MOVES LIST WHEN UNDER CHECK.
+		for (int i = 0; i < arrChessPiece.size(); i++)
+		{
+			if (arrChessPiece.get(i).isType() == false)
+			{
+				this.genValidMoves(arrChessPiece.get(i), true);
+			}
+		}
+		// Looping through and removing the values needed.
+		ArrayList<ChessPiece> negativeReduction = new ArrayList<ChessPiece>();
+		if (myframe.getValidLocC().size() == 0)
+		{
+			// Print out that you lost.
+			System.out.println("There are no valid moves, checkmate! You win.");
+			myframe.gameOver = true;
+			return;
+		}
+		negativeReduction = myframe.getValidLocC();
+		for (int i = 0; i < negativeReduction.size(); i++)
+		{
+			if (((negativeReduction.get(i).getX() < 0) || (negativeReduction.get(i).getX() > 525)) || ((negativeReduction.get(i).getY() < 50) || (negativeReduction.get(i).getY() > 575)))
+			{
+				negativeReduction.remove(i);
+				i = i - 1;
+			}
+		}
+		// Now adding back
+		myframe.setValidLocC(negativeReduction);
+		if (myframe.getValidLocC().size() == 0)
+		{
+			// Print out that you lost.
+			System.out.println("There are no valid moves, checkmate! You win.");
+			myframe.gameOver = true;
+			return;
+		}
+		// Set of valid moves are generated.
+		// Selects a move
+		int [] arr = new int[4];
+		arr = selectMove();
+		myframe.executeMove(arr[0], arr[1], arr[2], arr[3]);
+		// Simulating a computer turn.
+		// We also want to check if there was someone of the false type at that location.
+		for (int i = 0; i < myframe.getPieceLoc().size(); i++)
+		{
+			// If there is something there that is an enemy then we set myframe.pieceKilled to true.
+			if (((myframe.getPieceLoc().get(i).getX() == arr[0]) && (myframe.getPieceLoc().get(i).getY() == arr[1])) && (myframe.getPieceLoc().get(i).isType() == true))
+			{
+				myframe.pieceKilled = true;
+				myframe.killLocX = arr[0];
+				myframe.killLocY = arr[1];
+				myframe.killType = true;
+				break;
+			}
+		}
+		try
+		{
+			Thread.sleep(20);
+		} 
+		catch (InterruptedException e)
+		{
+			e.printStackTrace();
+		}
+		myframe.setDone(false);
+		myframe.panel.tmr.stop();
+	}
+	
+	// Main function 
+	public static void main(String[] args) 
+	{
+		// Creating a Semaphore to use.
+				Semaphore mySem = new Semaphore(0);		
+				// Figure out whose turn it is - Computer or User
+				System.out.println("Would you like to play white or black? (Enter 0 for white or 1 for black)");
+				int decision = 0;
+				try
+				{
+					decision = System.in.read(); // FIXME: Insert error-checking!
+				} catch (IOException e)
+				{
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+				// Creating a new Game
+				Game myGame = new Game(mySem, decision);
+				if ((decision - 48) == 0)
+				{
+					myGame.myframe.myColor = true;
+				}
+				else
+				{
+					myGame.myframe.myColor = false;
+				}
+				// Instantiate module 
+				myGame.myframe.pack();
+				myGame.myframe.setResizable(true);
+				myGame.myframe.setLocationRelativeTo( null );
+				myGame.myframe.setVisible(true); // Display board
+				  
+				// Computer Turn - lock all computer pieces from player interaction.
+				for (int i = 0; i < 8; i++)
+				{
+					for (int j = 0; j < 2; j++)
+					{
+						JLabel chessPiece = null;
+						Component c1 = myGame.myframe.getChessBoard().findComponentAt(75 * i,  75 * j + 50);
+						Point parentLocation1 = c1.getParent().getLocation(); 
+						int xAdjust1 = parentLocation1.x;
+						int yAdjust1 = parentLocation1.y;
+						chessPiece = (JLabel) c1;
+						// Set the location of the piece rending it immovable.
+						chessPiece.setLocation(xAdjust1, 50 + yAdjust1);
+						chessPiece.setSize(chessPiece.getWidth(), chessPiece.getHeight()); // Set size of chess piece
+						// myGame.myframe.getLayeredPane().add(chessPiece, JLayeredPane.DRAG_LAYER);
+					}
+				}
+				// need to loop while the game isn't over
+
+				decision = decision - 48;		
+				boolean [] arr = new boolean[2];
+				arr[0] = false;
+				arr[1] = false;
+				while(!myGame.myframe.gameOver)
+				{
+					if (decision == 0)
+					{
+						myGame.userMove(mySem);
+					}
+					else
+					{
+						myGame.computerMove();				
+					}
+					decision = 1 - decision;
+					// Looping to see if any of the king are gone, assume both are there and if one isn't determine 
+					// which one is left.
+					for (int i = 0; i < myGame.myframe.getPieceLoc().size(); i++)
+					{
+						if (myGame.myframe.getPieceLoc().get(i).getName().compareTo("user_king0") == 0)
+						{
+							// We Set it to true, it is here!
+							arr[0] = true;
+						}
+						if (myGame.myframe.getPieceLoc().get(i).getName().compareTo("comp_king0") == 0)
+						{
+							// We Set it to true, it is here!
+							arr[1] = true;
+						}
+					}
+					// Now we see which one is false if any
+					if (!arr[0])
+					{
+						System.out.println("You Lose! Please play again.");
+						System.exit(0);
+					}
+					else if (!arr[1])
+					{
+						System.out.println("Sweet Victory... You win!");
+						System.exit(0);
+					}
+					arr[0] = false;
+					arr[1] = false;
+				}
+			  }
+
+}
